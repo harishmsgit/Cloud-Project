@@ -2,6 +2,9 @@
 
 A collection of hands-on AWS projects designed for students to build real-world skills through guided, step-by-step exercises in their own AWS accounts.
 
+> 🚀 **First time here? Start with [SETUP.md](SETUP.md)** — it installs every tool you need
+> (AWS CLI, Python, Git, Docker, …) with steps for **Linux, macOS, and Windows**.
+
 ## Projects
 
 ### IAM & Security
@@ -79,6 +82,8 @@ project-name/
 - An active AWS account with console access
 - A user or role with sufficient permissions (each project specifies exactly what's needed)
 - Basic familiarity with the AWS Management Console
+- The required tooling installed on your laptop — see **[SETUP.md](SETUP.md)** for
+  AWS CLI, Python, Git, Docker, and more, with **Linux / macOS / Windows** instructions
 
 ## Contributing a New Project
 

@@ -20,6 +20,33 @@ profile, and the bootstrap script — lives in one versioned object.
    port 5000 (so it restarts on crash and survives reboots)
 4. Starts the CloudWatch agent if its config is present
 
+> **Why gunicorn? (in simple terms)**
+>
+> Flask has a built-in server you start with `python app.py` — but on boot it literally
+> warns *"This is a development server. Do not use it in a production deployment."* It
+> handles **one request at a time** and isn't hardened for the open internet. Perfect for
+> your laptop; wrong for a server taking live traffic from an ALB.
+>
+> **gunicorn** ("Green Unicorn") is a **production-grade web server** that runs your Flask
+> app for real. Picture a restaurant: Flask wrote the recipes (your endpoints), but gunicorn
+> is the kitchen with several cooks — **worker processes** — serving many diners at once. We
+> launch it with `--workers 2`, so two copies of the app answer requests in parallel: if one
+> worker is busy doing an `/api/load` CPU burn, the other still answers `/health`.
+>
+> What gunicorn gives you over `python app.py`:
+> - **Concurrency** — multiple workers instead of one-request-at-a-time, so the app doesn't
+>   stall under load (and the ALB's health checks don't time out).
+> - **Resilience** — if a worker hangs or crashes, gunicorn restarts it; if gunicorn itself
+>   dies, **systemd** restarts gunicorn. The app self-heals.
+> - **It speaks WSGI** — the standard "plug" between Python web apps and web servers — so it
+>   runs your Flask code unchanged, no rewrite needed.
+> - **It binds the port the ALB targets** (`0.0.0.0:5000`), so the load balancer's traffic
+>   and `/health` checks actually reach the app.
+>
+> The full request chain on each instance is: **ALB → gunicorn (port 5000) → your Flask
+> app**, all kept alive by **systemd**. (On your laptop you can still just run
+> `python app.py` for quick testing — gunicorn is specifically for the server.)
+
 ---
 
 ## 4.2 Console — Create the Launch Template
