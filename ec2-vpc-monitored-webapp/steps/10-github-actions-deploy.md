@@ -28,37 +28,27 @@ pattern from the [iam-roles-and-policies](../../iam-roles-and-policies/README.md
 
 ---
 
-## 10.2 Create the GitHub OIDC Provider (once per account)
+## 10.2 The OIDC Provider and Deploy Role (already created in Step 3)
 
-1. **IAM → Identity providers → Add provider**.
-   - Provider type: **OpenID Connect**
-   - Provider URL: `https://token.actions.githubusercontent.com`
-   - Audience: `sts.amazonaws.com`
-2. **Add provider.**
+You created both the **GitHub OIDC identity provider** and the
+**`GitHubActionsDeployRole`** (with its trust relationship dissected field by field) back
+in [Step 3 — IAM](./03-iam-roles.md#34-role-2--the-github-oidc-deploy-role). If you skipped
+those sections, do them now — the workflow can't authenticate without them.
+
+Quick recap of the trust relationship you built:
+
+- **Principal** = the OIDC provider `token.actions.githubusercontent.com`
+- **Action** = `sts:AssumeRoleWithWebIdentity`
+- **Condition** pins `aud` = `sts.amazonaws.com` (`StringEquals`) **and** `sub` =
+  `repo:ORG/REPO:ref:refs/heads/main` (`StringLike`) — the latter is what stops any other
+  repo from assuming the role.
 
 ---
 
-## 10.3 Create the Deploy Role
+## 10.3 Attach the Deploy Role's Permission Policy
 
-Create `GitHubActionsDeployRole` with a trust policy scoped to **your** repo (replace
-`ORG/REPO`), so only that repository can assume it:
-
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [{
-    "Effect": "Allow",
-    "Principal": {"Federated": "arn:aws:iam::<ACCOUNT_ID>:oidc-provider/token.actions.githubusercontent.com"},
-    "Action": "sts:AssumeRoleWithWebIdentity",
-    "Condition": {
-      "StringEquals": {"token.actions.githubusercontent.com:aud": "sts.amazonaws.com"},
-      "StringLike": {"token.actions.githubusercontent.com:sub": "repo:ORG/REPO:ref:refs/heads/main"}
-    }
-  }]
-}
-```
-
-Attach a **least-privilege** permission policy — only what the deploy needs:
+Trust says *who*; now grant *what*. Attach a **least-privilege** permission policy to
+`GitHubActionsDeployRole` — only what the deploy needs:
 
 | Permission | Why It's Needed |
 |------------|-----------------|
@@ -67,9 +57,9 @@ Attach a **least-privilege** permission policy — only what the deploy needs:
 | `ssm:GetCommandInvocation`, `ssm:ListCommandInvocations` | Poll the deploy result |
 
 ```bash
-aws iam create-role --role-name GitHubActionsDeployRole \
-  --assume-role-policy-document file://github-trust.json
-# then attach an inline policy with the permissions above (see challenges.md for the JSON)
+# Scope every Resource to the specific bucket/document — never "*". Full JSON: challenges.md.
+aws iam put-role-policy --role-name GitHubActionsDeployRole \
+  --policy-name webapp-deploy --policy-document file://deploy-permissions.json
 ```
 
 > Also create the S3 deploy bucket (e.g. `webapp-deploy-<account-id>`) and grant the
@@ -104,9 +94,9 @@ aws iam create-role --role-name GitHubActionsDeployRole \
 
 ## Checkpoint
 
-- [ ] GitHub OIDC identity provider exists in IAM
+- [ ] GitHub OIDC identity provider + `GitHubActionsDeployRole` exist (from Step 3)
 - [ ] `GitHubActionsDeployRole` trusts only `repo:ORG/REPO` on `main`
-- [ ] Role has least-privilege S3 + SSM permissions
+- [ ] Role now has its least-privilege S3 + SSM **permission** policy attached
 - [ ] S3 deploy bucket exists; instance role can `GetObject` from it
 - [ ] A push to `main` deploys new code; `version` updates behind the ALB
 - [ ] The deploy appears in CloudTrail

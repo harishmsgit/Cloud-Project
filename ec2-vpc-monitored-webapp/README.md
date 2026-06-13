@@ -137,7 +137,7 @@ ec2-vpc-monitored-webapp/
 ├── steps/
 │   ├── 01-vpc-networking.md           ← VPC, subnets, IGW, NAT, route tables
 │   ├── 02-security-groups.md          ← alb-sg and ec2-sg (least privilege)
-│   ├── 03-iam-roles.md                ← Instance profile + permissions explained
+│   ├── 03-iam-roles.md                ← Instance profile + GitHub OIDC role (trust relationship dissected)
 │   ├── 04-launch-ec2.md              ← Launch template + user-data bootstrap
 │   ├── 05-application-load-balancer.md← ALB, target group, listener, health check
 │   ├── 06-auto-scaling-group.md       ← ASG across 2 AZs + scaling policy
@@ -171,7 +171,7 @@ ec2-vpc-monitored-webapp/
 |------|------|------|
 | 1 | `01-vpc-networking.md` | VPC, 2 public + 2 private subnets, IGW, NAT, route tables |
 | 2 | `02-security-groups.md` | `alb-sg` (80 from world) and `ec2-sg` (5000 from ALB only) |
-| 3 | `03-iam-roles.md` | Instance profile with SSM + CloudWatch agent permissions |
+| 3 | `03-iam-roles.md` | EC2 instance profile **and** GitHub OIDC deploy role — with the OIDC trust relationship explained field by field |
 | 4 | `04-launch-ec2.md` | Launch template with user-data; verify the app boots |
 | 5 | `05-application-load-balancer.md` | ALB + target group + `/health` check |
 | 6 | `06-auto-scaling-group.md` | ASG 1–4 instances across both AZs + target-tracking policy |
