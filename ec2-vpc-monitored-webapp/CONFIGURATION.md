@@ -59,6 +59,195 @@ ec2-vpc-monitored-webapp/
 
 ---
 
+## Architecture Flow
+
+This architecture is designed for high availability, observability, and automated deployment.
+
+### End-to-End Flow
+
+1. User sends request to the application URL.
+2. Request reaches the internet-facing Application Load Balancer (ALB) in public subnets.
+3. ALB forwards traffic to EC2 instances in private subnets via target group health checks.
+4. EC2 instances run the Python web app and publish logs/metrics to CloudWatch.
+5. CloudWatch alarms trigger SNS notifications for operational alerts.
+6. CloudTrail captures API activities for auditing and security traceability.
+7. GitHub Actions pipeline validates and deploys code updates to the AWS environment.
+
+### Visual Diagram: Overall AWS Architecture
+
+```mermaid
+flowchart LR
+  U[End User / Browser] --> DNS[Application URL / DNS]
+  DNS --> ALB[Application Load Balancer\nPublic Subnets]
+
+  subgraph VPC[VPC 10.0.0.0/16]
+    subgraph PUB[Public Subnets]
+      ALB
+    end
+
+    subgraph PRIV[Private Subnets]
+      ASG[Auto Scaling Group]
+      EC2A[EC2 Instance A\nPython App]
+      EC2B[EC2 Instance B\nPython App]
+      ASG --> EC2A
+      ASG --> EC2B
+    end
+  end
+
+  ALB -->|HTTP/HTTPS| EC2A
+  ALB -->|HTTP/HTTPS| EC2B
+
+  EC2A --> CW[CloudWatch\nLogs + Metrics]
+  EC2B --> CW
+  CW --> ALARM[CloudWatch Alarms]
+  ALARM --> SNS[SNS Topic\nEmail/SMS Alerts]
+
+  CT[CloudTrail] -. Audit Events .-> S3[(S3 Trail Bucket)]
+  CT -. API Activity .-> IAM[IAM Roles/Policies]
+
+  GH[GitHub Repository] --> GHA[GitHub Actions]
+  GHA --> AWSDEPLOY[AWS Deployment Actions]
+  AWSDEPLOY --> ASG
+```
+
+### Visual Diagram: Request and Monitoring Path
+
+```mermaid
+sequenceDiagram
+  participant User as End User
+  participant ALB as ALB
+  participant EC2 as EC2 App Instance
+  participant CW as CloudWatch
+  participant SNS as SNS
+
+  User->>ALB: HTTP/HTTPS Request
+  ALB->>EC2: Forward to healthy target
+  EC2-->>ALB: Response
+  ALB-->>User: Application Response
+
+  EC2->>CW: Push app logs and metrics
+  CW->>CW: Evaluate alarm thresholds
+  CW-->>SNS: Trigger alarm notification
+  SNS-->>User: Email/SMS alert
+```
+
+### Visual Diagram: CI/CD Deployment Flow
+
+```mermaid
+flowchart TD
+  DEV[Developer Commit] --> GH[GitHub Repository]
+  GH --> ACT[GitHub Actions Workflow]
+  ACT --> TEST[Test Stage\npytest]
+  TEST -->|Pass| DEPLOY[Deploy Stage]
+  TEST -->|Fail| STOP[Stop and report]
+  DEPLOY --> AWS[AWS Account]
+  AWS --> ASG[Update ASG / Instances]
+  ASG --> ALB[Serve via ALB]
+```
+
+### Visual Diagram: Network and Security Layer
+
+```mermaid
+flowchart LR
+  INTERNET[Internet] --> IGW[Internet Gateway]
+
+  subgraph VPC[VPC 10.0.0.0/16]
+    subgraph PUBA[Public Subnet A]
+      ALB1[ALB Node A]
+    end
+    subgraph PUBB[Public Subnet B]
+      ALB2[ALB Node B]
+    end
+
+    subgraph PRIVA[Private Subnet A]
+      EC2A[EC2 App A]
+    end
+    subgraph PRIVB[Private Subnet B]
+      EC2B[EC2 App B]
+    end
+
+    RT_PUB[Public Route Table\n0.0.0.0/0 -> IGW]
+    RT_PRIV[Private Route Table]
+  end
+
+  IGW --> RT_PUB
+  RT_PUB --> ALB1
+  RT_PUB --> ALB2
+
+  ALB_SG[Security Group: ALB\nAllow 80/443 from Internet]
+  EC2_SG[Security Group: EC2\nAllow app port from ALB SG]
+
+  ALB1 -. associated .-> ALB_SG
+  ALB2 -. associated .-> ALB_SG
+  EC2A -. associated .-> EC2_SG
+  EC2B -. associated .-> EC2_SG
+
+  ALB1 -->|Forward traffic| EC2A
+  ALB2 -->|Forward traffic| EC2B
+  ALB_SG -->|Allowed source| EC2_SG
+
+  EC2A --> CW[CloudWatch]
+  EC2B --> CW
+```
+
+### Visual Diagram: AWS Service View (Presentation)
+
+```mermaid
+flowchart TB
+  USER[Users]
+  GH[GitHub]
+
+  subgraph AWS[AWS Account]
+    subgraph NET[VPC: 10.0.0.0/16]
+      IGW[Internet Gateway]
+
+      subgraph PUBLIC[Public Subnets]
+        ALB[AWS Application Load Balancer]
+      end
+
+      subgraph PRIVATE[Private Subnets]
+        ASG[AWS Auto Scaling Group]
+        EC2_1[AWS EC2 Instance]
+        EC2_2[AWS EC2 Instance]
+      end
+
+      RT[Route Tables]
+      SG[Security Groups]
+    end
+
+    CW[AWS CloudWatch\nMetrics + Logs + Alarms]
+    SNS[AWS SNS\nAlert Notifications]
+    CT[AWS CloudTrail\nAudit Logs]
+    S3[AWS S3\nTrail/ALB Log Storage]
+    IAM[AWS IAM Roles/Policies]
+    GHA[AWS Deployment via GitHub Actions]
+  end
+
+  USER --> IGW
+  IGW --> ALB
+  ALB --> ASG
+  ASG --> EC2_1
+  ASG --> EC2_2
+
+  EC2_1 --> CW
+  EC2_2 --> CW
+  CW --> SNS
+
+  CT --> S3
+  CT --> IAM
+
+  GH --> GHA
+  GHA --> ASG
+
+  RT -. controls .-> ALB
+  RT -. controls .-> EC2_1
+  SG -. secures .-> ALB
+  SG -. secures .-> EC2_1
+  SG -. secures .-> EC2_2
+```
+
+---
+
 ## Local Development Setup
 
 ### 1. Clone the Repository
