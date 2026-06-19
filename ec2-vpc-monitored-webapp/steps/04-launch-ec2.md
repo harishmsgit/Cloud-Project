@@ -103,6 +103,17 @@ AMI_ID=$(aws ssm get-parameter --region $REGION \
   --name /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64 \
   --query 'Parameter.Value' --output text)
 
+
+  AMI_ID=$(aws ssm get-parameter --region $REGION \
+  --name /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64 \
+  --query 'Parameter.Value' --output text)
+
+  echo $AMI_ID
+  export REGION=ap-south-1
+  AMI_ID=$(aws ssm get-parameter --region $REGION \
+  --name /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64 \
+  --query 'Parameter.Value' --output text)
+
 aws ec2 create-launch-template \
   --launch-template-name webapp-lt \
   --region $REGION \

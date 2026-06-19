@@ -110,6 +110,13 @@ VPC_ID=$(aws ec2 create-vpc --cidr-block 10.0.0.0/16 \
   --query 'Vpc.VpcId' --output text --region $REGION)
 aws ec2 create-tags --resources $VPC_ID --tags Key=Name,Value=webapp-vpc --region $REGION
 
+
+aws ec2 describe-vpcs \
+  --region ap-south-1 \
+  --query "Vpcs[*].[VpcId,Tags[?Key=='Name']|[0].Value]" \
+  --output table
+
+
 # Subnets
 PUB_A=$(aws ec2 create-subnet --vpc-id $VPC_ID --cidr-block 10.0.1.0/24 \
   --availability-zone us-east-1a --query 'Subnet.SubnetId' --output text --region $REGION)

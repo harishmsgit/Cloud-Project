@@ -63,6 +63,51 @@ TG_ARN=$(aws elbv2 create-target-group --name webapp-tg \
   --unhealthy-threshold-count 2 --health-check-interval-seconds 15 \
   --query 'TargetGroups[0].TargetGroupArn' --output text --region $REGION)
 
+-----
+sample data
+echo $TG_ARN
+arn:aws:elasticloadbalancing:ap-south-1:495013583028:targetgroup/webapp-tg/d3485cd7d0be433a
+
+aws ec2 describe-subnets \
+  --region ap-south-1 \
+  --query "Subnets[*].[SubnetId,Tags[?Key=='Name']|[0].Value,MapPublicIpOnLaunch]" \
+  --output table
+
+aws ec2 describe-subnets \
+  --subnet-ids subnet-0c5e50e1269a8aebb subnet-0f51a3c732212810d \
+  --query "Subnets[*].[SubnetId,VpcId]" \
+  --region ap-south-1 \
+  --output table
+-------------------------------------------------------
+|                   DescribeSubnets                   |
++---------------------------+-------------------------+
+|  subnet-0c5e50e1269a8aebb |  vpc-0edde88b9ffe9c2c6  |
+|  subnet-0f51a3c732212810d |  vpc-0edde88b9ffe9c2c6  |
++---------------------------+-------------------------+
+
+aws ec2 describe-security-groups \
+  --group-ids sg-04fe39f58ede5c7d2 \
+  --query "SecurityGroups[0].[GroupId,VpcId]" \
+  --region ap-south-1 \
+  --output table
+---------------------------
+| DescribeSecurityGroups  |
++-------------------------+
+|  sg-04fe39f58ede5c7d2   |
+|  vpc-06bbc38be0501663f  |
++-------------------------+
+
+export PUB_A=subnet-0c5e50e1269a8aebb
+export PUB_B=subnet-0f51a3c732212810d
+
+aws ec2 describe-security-groups \
+  --filters "Name=vpc-id,Values=vpc-0edde88b9ffe9c2c6" \
+  --query "SecurityGroups[*].[GroupName,GroupId]" \
+  --region ap-south-1 \
+  --output table
+
+----------
+
 ALB_ARN=$(aws elbv2 create-load-balancer --name webapp-alb \
   --subnets $PUB_A $PUB_B --security-groups $ALB_SG --scheme internet-facing \
   --type application --query 'LoadBalancers[0].LoadBalancerArn' --output text --region $REGION)
@@ -91,4 +136,245 @@ echo "TG_ARN=$TG_ARN  ALB_ARN=$ALB_ARN"
 
 ---
 
+
+----
+see the example:
+
+Get the Security Group, VPC, and ALB details for your webapp-eks-cluster
+
+******************************************************************************
+
+harish@Harish:~$ aws eks describe-cluster \
+  --name webapp-eks-cluster \
+  --region ap-south-1 \
+  --query "cluster.resourcesVpcConfig.vpcId" \
+  --output text
+vpc-0edde88b9ffe9c2c6
+
+harish@Harish:~$ aws eks describe-cluster \
+  --name webapp-eks-cluster \
+  --region ap-south-1 \
+  --query "cluster.resourcesVpcConfig.securityGroupIds" \
+  --output text
+sg-07fb090636a2a3414
+harish@Harish:~$
+
+
+harish@Harish:~$ aws eks describe-nodegroup \
+  --cluster-name webapp-eks-cluster \
+  --nodegroup-name dev-webapp-workers \
+  --region ap-south-1 \
+  --query "nodegroup.resources.securityGroups" \
+  --output text
+None
+harish@Harish:~$
+
+
+aws elbv2 describe-load-balancers \
+  --region ap-south-1 \
+  --query "LoadBalancers[?VpcId=='vpc-0edde88b9ffe9c2c6'].[LoadBalancerName,LoadBalancerArn,DNSName,VpcId]" \
+  --output table
+
+
+
+harish@Harish:~$ aws ec2 describe-security-groups \
+  --filters "Name=vpc-id,Values=vpc-0edde88b9ffe9c2c6" \
+  --query "SecurityGroups[*].[GroupName,GroupId]" \
+  --region ap-south-1 \
+  --output table
+-------------------------------------------------------------------------
+|                        DescribeSecurityGroups                         |
++----------------------------------------------+------------------------+
+|  dev-webapp-eks-sg                           |  sg-07fb090636a2a3414  |
+|  eks-cluster-sg-webapp-eks-cluster-127837498 |  sg-0a676162f8013ad92  |
+|  dev-webapp-ec2-sg                           |  sg-053c31b8be2325397  |
+|  default                                     |  sg-0670c407a6428e49d  |
++----------------------------------------------+------------------------+
+harish@Harish:~$
+harish@Harish:~$
+harish@Harish:~$
+harish@Harish:~$ aws ec2 create-security-group \
+  --group-name alb-sg \
+  --description "ALB ingress from internet" \
+  --vpc-id vpc-0edde88b9ffe9c2c6 \
+  --region ap-south-1
+{
+    "GroupId": "sg-07908bea5300ce1fb",
+    "SecurityGroupArn": "arn:aws:ec2:ap-south-1:495013583028:security-group/sg-07908bea5300ce1fb"
+}
+harish@Harish:~$'
+
+
+harish@Harish:~$ aws elbv2 describe-target-groups \
+  --names webapp-tg \
+  --region ap-south-1 \
+  --query "TargetGroups[*].[TargetGroupName,TargetGroupArn,Port,Protocol,TargetType,VpcId]" \
+  --output table
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------
+|                                                                      DescribeTargetGroups                                                                       |
++-----------+-----------------------------------------------------------------------------------------------+-------+-------+-----------+-------------------------+
+|  webapp-tg|  arn:aws:elasticloadbalancing:ap-south-1:495013583028:targetgroup/webapp-tg/d3485cd7d0be433a  |  5000 |  HTTP |  instance |  vpc-06bbc38be0501663f  |
++-----------+-----------------------------------------------------------------------------------------------+-------+-------+-----------+-------------------------+
+harish@Harish:~$
+
+
+
+
+harish@Harish:~$ TG_ARN=$(aws elbv2 create-target-group \
+  --name webapp-tg-eks \
+  --protocol HTTP \
+  --port 80 \
+  --vpc-id vpc-0edde88b9ffe9c2c6 \
+  --target-type instance \
+  --query 'TargetGroups[0].TargetGroupArn' \
+  --output text \
+  --region ap-south-1)
+harish@Harish:~$
+harish@Harish:~$
+harish@Harish:~$
+harish@Harish:~$ echo $TG_ARN
+arn:aws:elasticloadbalancing:ap-south-1:495013583028:targetgroup/webapp-tg-eks/5f9b3e7a25ef493b
+harish@Harish:~$
+
+harish@Harish:~$ aws ec2 describe-instances \
+  --filters "Name=vpc-id,Values=vpc-0edde88b9ffe9c2c6" \
+  --query "Reservations[*].Instances[*].[InstanceId,PrivateIpAddress,State.Name]" \
+  --region ap-south-1 \
+  --output table
+--------------------------------------------------
+|                DescribeInstances               |
++----------------------+--------------+----------+
+|  i-04b1a45430bbb7185 |  10.0.1.247  |  running |
+|  i-04c9c1b6d39c3d823 |  10.0.1.122  |  running |
+|  i-01063a03ddb6182b4 |  10.0.2.75   |  running |
++----------------------+--------------+----------+
+harish@Harish:~$
+
+harish@Harish:~$ aws elbv2 describe-target-groups \
+  --region ap-south-1 \
+  --query "TargetGroups[*].[TargetGroupName,TargetGroupArn,VpcId]" \
+  --output table
+-----------------------------------------------------------------------------------------------------------------------------------------------
+|                                                            DescribeTargetGroups                                                             |
++---------------+---------------------------------------------------------------------------------------------------+-------------------------+
+|  webapp-tg    |  arn:aws:elasticloadbalancing:ap-south-1:495013583028:targetgroup/webapp-tg/d3485cd7d0be433a      |  vpc-06bbc38be0501663f  |
+|  webapp-tg-eks|  arn:aws:elasticloadbalancing:ap-south-1:495013583028:targetgroup/webapp-tg-eks/5f9b3e7a25ef493b  |  vpc-0edde88b9ffe9c2c6  |
++---------------+---------------------------------------------------------------------------------------------------+-------------------------+
+harish@Harish:~$
+
+
+
+Register All Three EC2 Instances:
+
+harish@Harish:~$ aws elbv2 register-targets \
+  --target-group-arn arn:aws:elasticloadbalancing:ap-south-1:495013583028:targetgroup/webapp-tg-eks/5f9b3e7a25ef493b \
+  --targets Id=i-04b1a45430bbb7185 Id=i-04c9c1b6d39c3d823 Id=i-01063a03ddb6182b4 \
+  --region ap-south-1
+harish@Harish:~$
+harish@Harish:~$
+
+
+Create Listener:
+
+harish@Harish:~$ aws elbv2 create-listener \
+  --load-balancer-arn arn:aws:elasticloadbalancing:ap-south-1:495013583028:loadbalancer/app/webapp-alb/2cef235c4a288e73 \
+  --protocol HTTP \
+  --port 80 \
+  --default-actions Type=forward,TargetGroupArn=arn:aws:elasticloadbalancing:ap-south-1:495013583028:targetgroup/webapp-tg-eks/5f9b3e7a25ef493b \
+  --region ap-south-1
+{
+    "Listeners": [
+        {
+            "ListenerArn": "arn:aws:elasticloadbalancing:ap-south-1:495013583028:listener/app/webapp-alb/2cef235c4a288e73/0683959d26b0c6da",
+            "LoadBalancerArn": "arn:aws:elasticloadbalancing:ap-south-1:495013583028:loadbalancer/app/webapp-alb/2cef235c4a288e73",
+            "Port": 80,
+            "Protocol": "HTTP",
+            "DefaultActions": [
+                {
+                    "Type": "forward",
+                    "TargetGroupArn": "arn:aws:elasticloadbalancing:ap-south-1:495013583028:targetgroup/webapp-tg-eks/5f9b3e7a25ef493b",
+                    "ForwardConfig": {
+                        "TargetGroups": [
+                            {
+                                "TargetGroupArn": "arn:aws:elasticloadbalancing:ap-south-1:495013583028:targetgroup/webapp-tg-eks/5f9b3e7a25ef493b",
+                                "Weight": 1
+                            }
+                        ],
+                        "TargetGroupStickinessConfig": {
+                            "Enabled": false
+                        }
+                    }
+                }
+            ]
+        }
+    ]
+}
+harish@Harish:~$
+
+
+
+
+Verify Target Health:
+
+
+arish@Harish:~$ aws elbv2 describe-target-health \
+  --target-group-arn arn:aws:elasticloadbalancing:ap-south-1:495013583028:targetgroup/webapp-tg-eks/5f9b3e7a25ef493b \
+  --region ap-south-1 \
+  --output table
+-------------------------------------------------------------------------------------------------------
+|                                        DescribeTargetHealth                                         |
++-----------------------------------------------------------------------------------------------------+
+||                                     TargetHealthDescriptions                                      ||
+|+---------------------------------------------------------------------------------------------------+|
+||                                          HealthCheckPort                                          ||
+|+---------------------------------------------------------------------------------------------------+|
+||  80                                                                                               ||
+|+---------------------------------------------------------------------------------------------------+|
+|||                                     AdministrativeOverride                                      |||
+||+--------------------------------------------+-------------------------------------+--------------+||
+|||                 Description                |               Reason                |    State     |||
+||+--------------------------------------------+-------------------------------------+--------------+||
+|||  No override is currently active on target |  AdministrativeOverride.NoOverride  |  no_override |||
+||+--------------------------------------------+-------------------------------------+--------------+||
+|||                                             Target                                              |||
+||+-----------------------------------------------------------------------+-------------------------+||
+|||                                  Id                                   |          Port           |||
+||+-----------------------------------------------------------------------+-------------------------+||
+|||  i-01063a03ddb6182b4                                                  |  80                     |||
+||+-----------------------------------------------------------------------+-------------------------+||
+|||                                          TargetHealth                                           |||
+||+---------------------------------------------+-------------------------------------+-------------+||
+|||                 Description                 |               Reason                |    State    |||
+||+---------------------------------------------+-------------------------------------+-------------+||
+|||  Target registration is in progress         |  Elb.RegistrationInProgress         |  initial    |||
+||+---------------------------------------------+-------------------------------------+-------------+||
+||                                     TargetHealthDescriptions                                      ||
+|+---------------------------------------------------------------------------------------------------+|
+||                                          HealthCheckPort                                          ||
+|+---------------------------------------------------------------------------------------------------+|
+||  80                                                                                               ||
+|+---------------------------------------------------------------------------------------------------+|
+|||                                     AdministrativeOverride                                      |||
+||+--------------------------------------------+-------------------------------------+--------------+||
+|||                 Description                |               Reason                |    State     |||
+:
+
+
+
+
+
+Get ALB DNS:
+
+harish@Harish:~$ aws elbv2 describe-load-balancers \
+  --load-balancer-arns arn:aws:elasticloadbalancing:ap-south-1:495013583028:loadbalancer/app/webapp-alb/2cef235c4a288e73 \
+  --query "LoadBalancers[0].DNSName" \
+  --region ap-south-1 \
+  --output text
+webapp-alb-156753393.ap-south-1.elb.amazonaws.com
+harish@Harish:~$
+
+----
+
 **Next:** [Step 6 — Auto Scaling Group](./06-auto-scaling-group.md)
+
+

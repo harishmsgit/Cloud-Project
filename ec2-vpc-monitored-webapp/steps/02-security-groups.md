@@ -67,7 +67,7 @@ be reached from anywhere else in the VPC either.
 ## 2.4 AWS CLI (Alternative)
 
 ```bash
-REGION=us-east-1
+REGION=ap-south-1
 # VPC_ID from Step 1
 
 ALB_SG=$(aws ec2 create-security-group --group-name alb-sg \
@@ -83,6 +83,39 @@ aws ec2 authorize-security-group-ingress --group-id $EC2_SG \
   --protocol tcp --port 5000 --source-group $ALB_SG --region $REGION
 
 echo "ALB_SG=$ALB_SG  EC2_SG=$EC2_SG"
+
+##Actual value.
+
+VPC_ID=vpc-06bbc38be0501663f
+
+# ALB Security Group
+ALB_SG=$(aws ec2 create-security-group \
+  --group-name alb-sg \
+  --description "ALB ingress from internet" \
+  --vpc-id $VPC_ID \
+  --query 'GroupId' --output text --region $REGION)
+
+
+# EC2 Security Group
+EC2_SG=$(aws ec2 create-security-group \
+  --group-name ec2-sg \
+  --description "App port from ALB only" \
+  --vpc-id $VPC_ID \
+  --query 'GroupId' --output text --region $REGION
+
+aws ec2 describe-security-groups \
+  --region ap-south-1 \
+  --query "SecurityGroups[*].[GroupName,GroupId]" \
+  --output table
+
+export ALB_SG=sg-04fe39f58ede5c7d2
+export EC2_SG=sg-076b6436993e856b5
+echo "ALB_SG=$ALB_SG  EC2_SG=$EC2_SG"
+ALB_SG=sg-04fe39f58ede5c7d2  EC2_SG=sg-076b6436993e856b5
+
+
+  echo "ALB_SG=$ALB_SG  EC2_SG=$EC2_SG
+  
 ```
 
 ---

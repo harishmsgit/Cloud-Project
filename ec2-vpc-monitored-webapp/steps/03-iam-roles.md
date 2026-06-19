@@ -188,6 +188,8 @@ Scope every `Resource` to the specific bucket ARN and SSM document — never `"R
 ```bash
 REGION=us-east-1
 ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text) && echo $ACCOUNT_ID
+
 
 # ---- Role 1: EC2 instance profile ----
 cat > ec2-trust.json <<'JSON'
@@ -207,6 +209,19 @@ aws iam create-instance-profile --instance-profile-name WebAppInstanceRole
 aws iam add-role-to-instance-profile \
   --instance-profile-name WebAppInstanceRole --role-name WebAppInstanceRole
 
+
+  aws iam get-instance-profile \
+  --instance-profile-name WebAppInstanceRole
+
+  aws iam remove-role-from-instance-profile \
+  --instance-profile-name WebAppInstanceRole \
+  --role-name OLD_ROLE_NAME
+
+  repo:HeroVired/ec2-vpc-monitored-webapp
+  git remote -v
+  origin  https://github.com/Harish/ec2-vpc-monitored-webapp.git
+  repo:Harish/ec2-vpc-monitored-webapp
+
 # ---- OIDC provider (once per account) ----
 aws iam create-open-id-connect-provider \
   --url https://token.actions.githubusercontent.com \
@@ -222,6 +237,17 @@ cat > github-trust.json <<JSON
     "Condition": {
       "StringEquals": {"token.actions.githubusercontent.com:aud": "sts.amazonaws.com"},
       "StringLike": {"token.actions.githubusercontent.com:sub": "repo:ORG/REPO:ref:refs/heads/main"}
+    } }] }
+JSON
+
+cat > github-trust.json <<JSON
+{ "Version": "2012-10-17",
+  "Statement": [{ "Effect": "Allow",
+    "Principal": {"Federated": "arn:aws:iam::495013583028:oidc-provider/token.actions.githubusercontent.com"},
+    "Action": "sts:AssumeRoleWithWebIdentity",
+    "Condition": {
+      "StringEquals": {"token.actions.githubusercontent.com:aud": "sts.amazonaws.com"},
+      "StringLike": {"token.actions.githubusercontent.com:sub": "repo:Harish/ec2-vpc-monitored-webapp:ref:refs/heads/main"}
     } }] }
 JSON
 

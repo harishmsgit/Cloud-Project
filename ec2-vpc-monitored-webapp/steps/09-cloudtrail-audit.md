@@ -67,13 +67,56 @@ REGION=us-east-1
 ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 BUCKET=webapp-audit-trail-$ACCOUNT_ID
 
+harish@Harish:~/scripts$ echo $ACCOUNT_ID
+495013583028
+harish@Harish:~/scripts$
+
 aws s3api create-bucket --bucket $BUCKET --region $REGION
+harish@Harish:~/scripts$ aws s3api create-bucket \
+  --bucket $BUCKET \
+  --region ap-south-1 \
+  --create-bucket-configuration LocationConstraint=ap-south-1
+{
+    "Location": "http://webapp-audit-trail-495013583028.s3.amazonaws.com/",
+    "BucketArn": "arn:aws:s3:::webapp-audit-trail-495013583028"
+}
+harish@Harish:~/scripts$
+
 # (Attach the CloudTrail bucket policy — the Console does this automatically;
 #  see troubleshooting.md if you create the bucket by hand.)
+
+harish@Harish:~/scripts$ aws s3api put-bucket-policy \
+  --bucket webapp-audit-trail-495013583028 \
+  --policy file://cloudtrail-bucket-policy.json \
+  --region ap-south-1
+harish@Harish:~/scripts$
 
 aws cloudtrail create-trail --name webapp-audit-trail \
   --s3-bucket-name $BUCKET --is-multi-region-trail --enable-log-file-validation --region $REGION
 aws cloudtrail start-logging --name webapp-audit-trail --region $REGION
+
+Correct one :
+
+harish@Harish:~/scripts$ aws cloudtrail create-trail \
+  --name webapp-audit-trail \
+  --s3-bucket-name webapp-audit-trail-495013583028 \
+  --is-multi-region-trail \
+  --enable-log-file-validation \
+  --region ap-south-1
+
+aws cloudtrail start-logging \
+  --name webapp-audit-trail \
+  --region ap-south-1
+{
+    "Name": "webapp-audit-trail",
+    "S3BucketName": "webapp-audit-trail-495013583028",
+    "IncludeGlobalServiceEvents": true,
+    "IsMultiRegionTrail": true,
+    "TrailARN": "arn:aws:cloudtrail:ap-south-1:495013583028:trail/webapp-audit-trail",
+    "LogFileValidationEnabled": true,
+    "IsOrganizationTrail": false
+}
+harish@Harish:~/scripts$
 ```
 
 ---
@@ -88,3 +131,37 @@ aws cloudtrail start-logging --name webapp-audit-trail --region $REGION
 ---
 
 **Next:** [Step 10 — GitHub Actions Deploy](./10-github-actions-deploy.md)
+
+
+
+
+harish@Harish:~/scripts$ cat cloudtrail-bucket-policy.json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AWSCloudTrailWrite",
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "cloudtrail.amazonaws.com"
+      },
+      "Action": "s3:PutObject",
+      "Resource": "arn:aws:s3:::webapp-audit-trail-495013583028/AWSLogs/495013583028/*",
+      "Condition": {
+        "StringEquals": {
+          "s3:x-amz-acl": "bucket-owner-full-control"
+        }
+      }
+    },
+    {
+      "Sid": "AWSCloudTrailAclCheck",
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "cloudtrail.amazonaws.com"
+      },
+      "Action": "s3:GetBucketAcl",
+      "Resource": "arn:aws:s3:::webapp-audit-trail-495013583028"
+    }
+  ]
+}
+harish@Harish:~/scripts$

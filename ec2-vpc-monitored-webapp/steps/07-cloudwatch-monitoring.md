@@ -14,6 +14,31 @@ The agent config is in `scripts/cloudwatch-agent-config.json`. It collects
 
 Store the config in **SSM Parameter Store**, then have the agent fetch it on every instance:
 
+harish@Harish:~$ cd scripts/
+harish@Harish:~/scripts$ nano ~/scripts/cloudwatch-agent-config.json
+
+aws ssm put-parameter \
+  --name "/webapp/cloudwatch-agent-config" \
+  --type String \
+  --value file://$(pwd)/cloudwatch-agent-config.json \    ##--value file:///home/harish/scripts/cloudwatch-agent-config.json \
+  --overwrite \
+  --region ap-south-1
+
+  harish@Harish:~/scripts$ aws ssm put-parameter \
+  --name "/webapp/cloudwatch-agent-config" \
+  --type String \
+  --value file://$(pwd)/cloudwatch-agent-config.json \
+  --overwrite \
+  --region ap-south-1
+{
+    "Version": 1,
+    "Tier": "Standard"
+}
+harish@Harish:~/scripts$ ls
+cloudwatch-agent-config.json
+harish@Harish:~/scripts$
+
+
 ```bash
 REGION=us-east-1
 
@@ -54,6 +79,55 @@ After a minute, **CloudWatch → Metrics → All metrics → EC2MonitoredWebApp*
    the notification (or come back after Step 8). **Alarm name:** `webapp-high-cpu`.
 5. **Create alarm.**
 
+aws cloudwatch put-metric-alarm \
+  --alarm-name HighCPUAlarm \
+  --metric-name CPUUtilization \
+  --namespace AWS/EC2 \
+  --statistic Average \
+  --period 60 \
+  --threshold 80 \
+  --comparison-operator GreaterThanThreshold \
+  --dimensions Name=InstanceId,Value=i-1234567890abcdef0 \
+  --evaluation-periods 2 \
+  --alarm-actions arn:aws:sns:ap-south-1:123456789012:NotifyMe \
+  --region ap-south-1
+
+harish@Harish:~/scripts$ aws cloudwatch describe-alarms   --alarm-names HighCPUAlarm   --region ap-south-1
+{
+    "MetricAlarms": [
+        {
+            "AlarmName": "HighCPUAlarm",
+            "AlarmArn": "arn:aws:cloudwatch:ap-south-1:495013583028:alarm:HighCPUAlarm",
+            "AlarmConfigurationUpdatedTimestamp": "2026-06-18T19:20:41.227000+00:00",
+            "ActionsEnabled": true,
+            "OKActions": [],
+            "AlarmActions": [
+                "arn:aws:sns:ap-south-1:123456789012:NotifyMe"
+            ],
+            "InsufficientDataActions": [],
+            "StateValue": "INSUFFICIENT_DATA",
+            "StateReason": "Unchecked: Initial alarm creation",
+            "StateUpdatedTimestamp": "2026-06-18T19:20:41.227000+00:00",
+            "MetricName": "CPUUtilization",
+            "Namespace": "AWS/EC2",
+            "Statistic": "Average",
+            "Dimensions": [
+                {
+                    "Name": "InstanceId",
+                    "Value": "i-1234567890abcdef0"
+                }
+            ],
+            "Period": 60,
+            "EvaluationPeriods": 2,
+            "Threshold": 80.0,
+            "ComparisonOperator": "GreaterThanThreshold",
+            "StateTransitionedTimestamp": "2026-06-18T19:20:41.227000+00:00"
+        }
+    ],
+    "CompositeAlarms": []
+}
+harish@Harish:~/scripts$
+
 ---
 
 ## 7.3 Console — Build the Dashboard
@@ -64,6 +138,73 @@ After a minute, **CloudWatch → Metrics → All metrics → EC2MonitoredWebApp*
    - **Memory** — `EC2MonitoredWebApp → MemoryUtilization`
    - **ALB Request Count** — `AWS/ApplicationELB → RequestCount → LoadBalancer <alb-suffix>`
 3. **Save dashboard.**
+
+harish@Harish:~/scripts$ aws autoscaling put-scaling-policy \
+  --policy-name scale-in-policy \
+  --auto-scaling-group-name webapp-asg \
+  --scaling-adjustment -1 \
+  --adjustment-type ChangeInCapacity \
+  --region ap-south-1
+{
+    "PolicyARN": "arn:aws:autoscaling:ap-south-1:495013583028:scalingPolicy:7835686f-4fdf-47d5-80cf-bec80b9756d5:autoScalingGroupName/webapp-asg:policyName/scale-in-policy",
+    "Alarms": []
+}
+harish@Harish:~/scripts$
+
+harish@Harish:~/scripts$ export SCALE_OUT_ARN=arn:aws:autoscaling:ap-south-1:495013583028:scalingPolicy:7835686f-4fdf-47d5-80cf-bec80
+b9756d5:autoScalingGroupName/webapp-asg:policyName/scale-in-policy
+harish@Harish:~/scripts$
+
+Create a Scale‑In Policy:
+
+harish@Harish:~/scripts$ aws autoscaling put-scaling-policy \
+  --policy-name scale-in-policy \
+  --auto-scaling-group-name webapp-asg \
+  --scaling-adjustment -1 \
+  --adjustment-type ChangeInCapacity \
+  --region ap-south-1
+{
+    "PolicyARN": "arn:aws:autoscaling:ap-south-1:495013583028:scalingPolicy:7835686f-4fdf-47d5-80cf-bec80b9756d5:autoScalingGroupName/webapp-asg:policyName/scale-in-policy",
+    "Alarms": []
+}
+harish@Harish:~/scripts$ export SCALE_IN_ARN=arn:aws:autoscaling:ap-south-1:495013583028:scalingPolicy:7835686f-4fdf-47d5-80cf-bec80b9756d5:autoScalingGroupName/webapp-asg:policyName/scale-in-policy
+harish@Harish:~/scripts$
+
+Attach Policies to Alarms:
+
+aws cloudwatch put-metric-alarm \
+  --alarm-name HighCPUAlarm \
+  --metric-name CPUUtilization \
+  --namespace AWS/EC2 \
+  --statistic Average \
+  --period 60 \
+  --threshold 80 \
+  --comparison-operator GreaterThanThreshold \
+  --dimensions Name=AutoScalingGroupName,Value=webapp-asg \
+  --evaluation-periods 2 \
+  --alarm-actions $SCALE_OUT_ARN \
+  --region ap-south-1
+
+
+Low CPU Alarm (scale in):
+
+aws cloudwatch put-metric-alarm \
+  --alarm-name LowCPUAlarm \
+  --metric-name CPUUtilization \
+  --namespace AWS/EC2 \
+  --statistic Average \
+  --period 60 \
+  --threshold 30 \
+  --comparison-operator LessThanThreshold \
+  --dimensions Name=AutoScalingGroupName,Value=webapp-asg \
+  --evaluation-periods 2 \
+  --alarm-actions $SCALE_IN_ARN \
+  --region ap-south-1
+
+aws autoscaling describe-policies --auto-scaling-group-name webapp-asg --region ap-south-1
+aws cloudwatch describe-alarms --region ap-south-1
+
+
 
 ---
 

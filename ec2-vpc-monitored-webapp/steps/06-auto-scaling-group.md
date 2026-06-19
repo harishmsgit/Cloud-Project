@@ -64,6 +64,71 @@ the *alarm + email* side of this in Steps 7–8.
 ```bash
 REGION=us-east-1
 # PRIV_A, PRIV_B, TG_ARN from earlier steps
+harish@Harish:~$ aws ec2 describe-security-groups \
+  --region ap-south-1 \
+  --query "SecurityGroups[*].[GroupId,GroupName,VpcId]" \
+  --output table
+
+harish@Harish:~$ aws ec2 describe-security-groups \
+  --filters "Name=group-name,Values=ec2-sg,alb-sg" \
+  --region ap-south-1 \
+  --query "SecurityGroups[*].[GroupId,GroupName,VpcId]" \
+  --output table
+-------------------------------------------------------------
+|                  DescribeSecurityGroups                   |
++-----------------------+---------+-------------------------+
+|  sg-076b6436993e856b5 |  ec2-sg |  vpc-06bbc38be0501663f  |
+|  sg-04fe39f58ede5c7d2 |  alb-sg |  vpc-06bbc38be0501663f  |
+|  sg-07908bea5300ce1fb |  alb-sg |  vpc-0edde88b9ffe9c2c6  |
++-----------------------+---------+-------------------------+
+harish@Harish:~$
+
+
+harish@Harish:~$
+harish@Harish:~$ aws ec2 describe-security-groups \
+  --group-ids sg-04fe39f58ede5c7d2 \
+  --query "SecurityGroups[0].[GroupId,VpcId]" \
+  --region ap-south-1 \
+  --output table
+---------------------------
+| DescribeSecurityGroups  |
++-------------------------+
+|  sg-04fe39f58ede5c7d2   |
+|  vpc-06bbc38be0501663f  |
++-------------------------+
+harish@Harish:~$ aws ec2 describe-subnets \
+  --filters "Name=vpc-id,Values=vpc-06bbc38be0501663f" \
+  --region ap-south-1 \
+  --query "Subnets[*].[SubnetId,AvailabilityZone,MapPublicIpOnLaunch]" \
+  --output table
+------------------------------------------------------
+|                   DescribeSubnets                  |
++---------------------------+---------------+--------+
+|  subnet-0e54df2d816960e00 |  ap-south-1a  |  False |
+|  subnet-01a80965fe86324ed |  ap-south-1b  |  False |
+|  subnet-0a41d7a8d85ac7a34 |  ap-south-1b  |  True  |
+|  subnet-02fee81603fe57089 |  ap-south-1a  |  True  |
++---------------------------+---------------+--------+
+harish@Harish:~$
+
+export PRIV_A=subnet-0e54df2d816960e00
+export PRIV_B=subnet-01a80965fe86324ed
+
+
+harish@Harish:~$ aws elbv2 describe-target-groups \
+  --region ap-south-1 \
+  --query "TargetGroups[*].[TargetGroupName,TargetGroupArn,VpcId]" \
+  --output table
+-----------------------------------------------------------------------------------------------------------------------------------------------
+|                                                            DescribeTargetGroups                                                             |
++---------------+---------------------------------------------------------------------------------------------------+-------------------------+
+|  webapp-tg    |  arn:aws:elasticloadbalancing:ap-south-1:495013583028:targetgroup/webapp-tg/d3485cd7d0be433a      |  vpc-06bbc38be0501663f  |
+|  webapp-tg-eks|  arn:aws:elasticloadbalancing:ap-south-1:495013583028:targetgroup/webapp-tg-eks/5f9b3e7a25ef493b  |  vpc-0edde88b9ffe9c2c6  |
++---------------+---------------------------------------------------------------------------------------------------+-------------------------+
+harish@Harish:~$
+
+export TG_ARN=arn:aws:elasticloadbalancing:ap-south-1:495013583028:targetgroup/webapp-tg-eks/5f9b3e7a25ef493b
+
 
 aws autoscaling create-auto-scaling-group \
   --auto-scaling-group-name webapp-asg \
@@ -72,6 +137,19 @@ aws autoscaling create-auto-scaling-group \
   --target-group-arns $TG_ARN \
   --health-check-type ELB --health-check-grace-period 120 \
   --min-size 1 --max-size 4 --desired-capacity 2 --region $REGION
+
+
+  harish@Harish:~$ aws autoscaling describe-auto-scaling-groups \
+  --region ap-south-1 \
+  --query "AutoScalingGroups[*].[AutoScalingGroupName,VPCZoneIdentifier]" \
+  --output table
+----------------------------------------------------------------------------------------------------------------------
+|                                              DescribeAutoScalingGroups                                             |
++--------------------------------------------------------------+-----------------------------------------------------+
+|  eks-dev-webapp-workers-5ecf5b3d-816a-a13c-56f5-a4aea5c5485b |  subnet-0c5e50e1269a8aebb,subnet-0f51a3c732212810d  |
+|  webapp-asg                                                  |  subnet-0e54df2d816960e00,subnet-01a80965fe86324ed  |
++--------------------------------------------------------------+-----------------------------------------------------+
+harish@Harish:~$
 
 aws autoscaling put-scaling-policy \
   --auto-scaling-group-name webapp-asg \
@@ -82,6 +160,29 @@ aws autoscaling put-scaling-policy \
     "TargetValue": 50.0
   }' --region $REGION
 ```
+
+harish@Harish:~$ aws autoscaling put-scaling-policy \
+  --auto-scaling-group-name webapp-asg \
+  --policy-name cpu-target-tracking \
+  --policy-type TargetTrackingScaling \
+  --target-tracking-configuration '{
+    "PredefinedMetricSpecification": {"PredefinedMetricType": "ASGAverageCPUUtilization"},
+    "TargetValue": 50.0
+  }' --region $REGION
+{
+    "PolicyARN": "arn:aws:autoscaling:ap-south-1:495013583028:scalingPolicy:1a7fb2a9-4bd0-440c-830d-cfabd04d6462:autoScalingGroupName/webapp-asg:policyName/cpu-target-tracking",
+    "Alarms": [
+        {
+            "AlarmName": "TargetTracking-webapp-asg-AlarmHigh-9d6d755b-deb9-4826-9530-b972fbe55890",
+            "AlarmARN": "arn:aws:cloudwatch:ap-south-1:495013583028:alarm:TargetTracking-webapp-asg-AlarmHigh-9d6d755b-deb9-4826-9530-b972fbe55890"
+        },
+        {
+            "AlarmName": "TargetTracking-webapp-asg-AlarmLow-559c9f03-c05e-4e42-9450-ef2ba333b6a3",
+            "AlarmARN": "arn:aws:cloudwatch:ap-south-1:495013583028:alarm:TargetTracking-webapp-asg-AlarmLow-559c9f03-c05e-4e42-9450-ef2ba333b6a3"
+        }
+    ]
+}
+harish@Harish:~$
 
 ---
 

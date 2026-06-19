@@ -65,6 +65,12 @@ fires, a recovery email follows.
 ```bash
 REGION=us-east-1
 TOPIC_ARN=$(aws sns create-topic --name webapp-alerts --query 'TopicArn' --output text --region $REGION)
+
+harish@Harish:~/scripts$ echo $TOPIC_ARN
+arn:aws:sns:ap-south-1:495013583028:webapp-alerts
+harish@Harish:~/scripts$
+
+
 aws sns subscribe --topic-arn $TOPIC_ARN --protocol email --notification-endpoint you@example.com --region $REGION
 # ... confirm the email link, then attach to the alarm:
 aws cloudwatch put-metric-alarm --alarm-name webapp-high-cpu \
@@ -75,7 +81,70 @@ aws cloudwatch put-metric-alarm --alarm-name webapp-high-cpu \
   --threshold 60 --comparison-operator GreaterThanThreshold \
   --treat-missing-data notBreaching \
   --alarm-actions $TOPIC_ARN --ok-actions $TOPIC_ARN --region $REGION
+
+
+  harish@Harish:~/scripts$ aws sns subscribe --topic-arn $TOPIC_ARN --protocol email --notification-endpoint you@example.com --region $REGION
+# ... confirm the email link, then attach to the alarm:
+aws cloudwatch put-metric-alarm --alarm-name webapp-high-cpu \
+  --alarm-description "ASG avg CPU > 60% for 2 min" \
+  --namespace AWS/EC2 --metric-name CPUUtilization \
+  --dimensions Name=AutoScalingGroupName,Value=webapp-asg \
+  --statistic Average --period 60 --evaluation-periods 2 \
+  --threshold 60 --comparison-operator GreaterThanThreshold \
+  --treat-missing-data notBreaching \
+  --alarm-actions $TOPIC_ARN --ok-actions $TOPIC_ARN --region $REGION
+{
+    "SubscriptionArn": "pending confirmation"
+}
+harish@Harish:~/scripts$
+
 ```
+
+harish@Harish:~/scripts$ aws sns list-subscriptions-by-topic \
+  --topic-arn $TOPIC_ARN \
+  --region $REGION
+{
+    "Subscriptions": [
+        {
+            "SubscriptionArn": "PendingConfirmation",
+            "Owner": "495013583028",
+            "Protocol": "email",
+            "Endpoint": "you@example.com",
+            "TopicArn": "arn:aws:sns:ap-south-1:495013583028:webapp-alerts"
+        }
+    ]
+}
+harish@Harish:~/scripts$
+
+
+Subscribe with the New Email:
+
+aws sns subscribe \
+  --topic-arn $TOPIC_ARN \
+  --protocol email \
+  --notification-endpoint senhrish108@gmail.com \
+  --region $REGION
+
+harish@Harish:~/scripts$ aws sns list-subscriptions-by-topic   --topic-arn $TOPIC_ARN   --region $REGION
+{
+    "Subscriptions": [
+        {
+            "SubscriptionArn": "PendingConfirmation",
+            "Owner": "495013583028",
+            "Protocol": "email",
+            "Endpoint": "you@example.com",
+            "TopicArn": "arn:aws:sns:ap-south-1:495013583028:webapp-alerts"
+        },
+        {
+            "SubscriptionArn": "PendingConfirmation",
+            "Owner": "495013583028",
+            "Protocol": "email",
+            "Endpoint": "senhrish108@gmail.com",
+            "TopicArn": "arn:aws:sns:ap-south-1:495013583028:webapp-alerts"
+        }
+    ]
+}
+harish@Harish:~/scripts$
 
 > `setup_monitoring.py` from Step 7 already does all of this — this is the manual equivalent.
 
